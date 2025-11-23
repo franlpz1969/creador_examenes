@@ -119,12 +119,14 @@ export const generateTestQuestions = async (text: string, settings: ExamSettings
   };
 
   const prompt = `
-    Genera ${settings.questionCount} preguntas de tipo test (selección múltiple) basadas en el siguiente texto.
+    INSTRUCCIÓN CRÍTICA: Genera ${settings.questionCount} preguntas de tipo test basadas ESTRICTAMENTE en el texto proporcionado a continuación.
     
-    IMPORTANTE: 
-    - Usa principalmente la información del texto proporcionado
-    - Las preguntas deben ser respondibles con el contenido del texto
-    - Puedes usar conocimiento general para crear opciones incorrectas plausibles
+    REGLAS OBLIGATORIAS:
+    1. Cada pregunta DEBE basarse en información que aparece EXPLÍCITAMENTE en el texto
+    2. NO inventes información que no esté en el texto
+    3. Las respuestas correctas DEBEN poder verificarse leyendo el texto
+    4. Las opciones incorrectas pueden usar conocimiento general pero deben ser claramente incorrectas según el texto
+    5. Si el texto no tiene suficiente información, genera MENOS preguntas (no inventes contenido)
     
     El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
     ${settings.showSourceFile ? "Para cada pregunta, identifica de qué documento y página proviene. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
@@ -136,10 +138,10 @@ export const generateTestQuestions = async (text: string, settings: ExamSettings
     - ${getDifficultyPrompt(settings.difficulty)}
     - ${settings.optionsCount || 4} opciones por pregunta
     - ${settings.allowMultipleCorrect ? "Pueden haber múltiples respuestas correctas" : "Una sola respuesta correcta"}
-    - Incluye una explicación clara
-    - Proporciona una cita del texto que respalde la respuesta
+    - Incluye una explicación que cite el texto
+    - Proporciona una cita TEXTUAL del documento que respalde la respuesta
     
-    TEXTO:
+    TEXTO DEL DOCUMENTO:
     ${text.slice(0, 30000)}
   `;
 

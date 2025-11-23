@@ -107,6 +107,8 @@ const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles, setti
             });
             parts = newParts;
         });
+        console.log('Parsed parts:', parts);
+        console.log('Hidden words:', currentCard.hiddenWords);
         return parts;
     };
 
