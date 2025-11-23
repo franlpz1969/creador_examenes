@@ -1,0 +1,5 @@
+{
+  "name": "DocuExam AI",
+  "description": "Transform PDF documents into interactive exams, flashcards, and open-ended evaluations using Gemini AI.",
+  "requestFramePermissions": []
+}

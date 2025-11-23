@@ -1,0 +1,255 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ClozeCard } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Eye, ArrowRight, RotateCcw, Volume2, StopCircle, FileText } from 'lucide-react';
+
+interface Props {
+    cards: ClozeCard[];
+    onRestart: () => void;
+}
+
+const ExamClozeMode: React.FC<Props> = ({ cards, onRestart }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [isRevealed, setIsRevealed] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+
+    const speechInterval = useRef<number | null>(null);
+
+    const currentCard = cards[currentIndex];
+    const isFinished = currentIndex >= cards.length;
+
+    useEffect(() => {
+        const checkSpeech = () => {
+            setIsSpeaking(window.speechSynthesis.speaking);
+        };
+        speechInterval.current = window.setInterval(checkSpeech, 100);
+        return () => {
+            if (speechInterval.current) clearInterval(speechInterval.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (currentCard) {
+            setIsRevealed(false);
+            window.speechSynthesis.cancel();
+        }
+        return () => {
+            window.speechSynthesis.cancel();
+        }
+    }, [currentCard]);
+
+    const escapeRegExp = (string: string) => {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    const getParsedContent = () => {
+        if (!currentCard) return [];
+        let parts: { text: string; hidden: boolean; word?: string }[] = [{ text: currentCard.fullText, hidden: false }];
+
+        currentCard.hiddenWords.forEach(word => {
+            if (!word) return;
+            const newParts: typeof parts = [];
+            parts.forEach(part => {
+                if (part.hidden) {
+                    newParts.push(part);
+                } else {
+                    const safeWord = escapeRegExp(word.trim());
+                    // Use case-insensitive matching
+                    const regex = new RegExp(`(${safeWord})`, 'gi');
+                    const split = part.text.split(regex);
+                    split.forEach(s => {
+                        if (s.toLowerCase() === word.trim().toLowerCase()) {
+                            newParts.push({ text: s, hidden: true, word: s });
+                        } else {
+                            if (s) newParts.push({ text: s, hidden: false });
+                        }
+                    });
+                }
+            });
+            parts = newParts;
+        });
+        return parts;
+    };
+
+    const toggleSpeech = () => {
+        if (!currentCard) return;
+        if (!('speechSynthesis' in window)) return;
+
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+            return;
+        }
+
+        window.speechSynthesis.cancel();
+
+        const parts = getParsedContent();
+        const textToRead = parts.map(p => {
+            if (p.hidden && !isRevealed) {
+                return " espacio "; // Reads "space" for gaps
+            }
+            return p.text.replace(/[_]{2,}/g, '');
+        }).join('');
+
+        setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(textToRead);
+            utterance.lang = 'es-ES';
+
+            const setVoice = () => {
+                const voices = window.speechSynthesis.getVoices();
+                const spanishVoice = voices.find(v => v.lang.includes('es-ES')) ||
+                    voices.find(v => v.lang.includes('es'));
+                if (spanishVoice) utterance.voice = spanishVoice;
+            };
+
+            if (window.speechSynthesis.getVoices().length === 0) {
+                window.speechSynthesis.onvoiceschanged = setVoice;
+            } else {
+                setVoice();
+            }
+
+            // @ts-ignore
+            window.currentUtterance = utterance;
+            utterance.onend = () => {
+                // @ts-ignore
+                delete window.currentUtterance;
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }, 50);
+    }
+
+    const handleNext = () => {
+        window.speechSynthesis.cancel();
+        setCurrentIndex(prev => prev + 1);
+    };
+
+    if (isFinished) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
+                <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">¡Repaso Completado!</h2>
+                <button onClick={onRestart} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-transform hover:scale-105">
+                    <RotateCcw size={20} /> Reiniciar
+                </button>
+            </div>
+        )
+    }
+
+    const parts = getParsedContent();
+
+
+    return (
+        <div className="w-full max-w-3xl mx-auto perspective-1000">
+            <div className="flex justify-between mb-4 text-slate-500 dark:text-slate-400 font-medium items-center">
+                <span>Tarjeta {currentIndex + 1} de {cards.length}</span>
+                <div className="flex gap-2">
+                    <button
+                        onClick={toggleSpeech}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${isSpeaking
+                            ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                            : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900 dark:text-indigo-300'
+                            }`}
+                    >
+                        {isSpeaking ? (
+                            <>
+                                <StopCircle size={18} fill="currentColor" />
+                                <span>PARAR</span>
+                            </>
+                        ) : (
+                            <>
+                                <Volume2 size={18} />
+                                <span>Leer</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={currentIndex}
+                    initial={{ opacity: 0, x: 200, scale: 0.5, rotate: 10 }}
+                    animate={{ opacity: 1, x: 0, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, x: -200, scale: 0.5, rotate: -10 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20, mass: 1 }}
+                    className="bg-white dark:bg-slate-950 rounded-3xl shadow-2xl dark:shadow-none border border-slate-100 dark:border-slate-800 overflow-hidden min-h-[550px] flex flex-col transform-gpu"
+                >
+                    {/* Decorative Top */}
+                    <div className="h-20 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-indigo-950 dark:to-slate-900 relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-400 via-transparent to-transparent"></div>
+                    </div>
+
+                    {/* Content Area */}
+                    <div className="p-8 flex-grow flex flex-col items-center justify-center bg-white dark:bg-slate-950 relative">
+                        <div className="relative z-10 w-full">
+                            <p className="text-2xl font-medium text-slate-700 dark:text-slate-200 leading-loose text-center">
+                                {parts.map((part, i) => {
+                                    if (part.hidden) {
+                                        return (
+                                            <span key={i} className="inline-block mx-1 align-bottom">
+                                                <span className={`
+                                            inline-block
+                                            min-w-[100px] px-2 py-0.5 rounded-md border-b-4
+                                            text-center font-bold
+                                            transition-all duration-300
+                                            ${isRevealed
+                                                        ? 'bg-green-100 dark:bg-green-900/40 border-green-500 text-green-700 dark:text-green-300'
+                                                        : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 select-none'
+                                                    }
+                                        `}>
+                                                    <span className={!isRevealed ? 'opacity-0' : ''}>
+                                                        {part.word || "______"}
+                                                    </span>
+                                                </span>
+                                            </span>
+                                        )
+                                    }
+                                    return <span key={i}>{part.text}</span>
+                                })}
+                            </p>
+                        </div>
+
+                        {/* Backup text display */}
+                        {isRevealed && (
+                            <div className="mt-12 pt-6 border-t border-slate-100 dark:border-slate-800 w-full text-center opacity-75">
+                                <p className="text-xs text-slate-400 uppercase font-bold mb-3">Palabras Clave</p>
+                                <div className="flex flex-wrap justify-center gap-3">
+                                    {currentCard.hiddenWords.map((w, idx) => (
+                                        <span key={idx} className="px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-lg text-base font-semibold text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                                            {w}
+                                        </span>
+                                    ))}
+                                </div>
+                                {currentCard.sourceFile && (
+                                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-center gap-1 text-xs text-slate-400 font-medium">
+                                        <FileText size={12} /> Fuente: {currentCard.sourceFile}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Action Area */}
+                    <div className="p-6 bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row gap-4 justify-center border-t border-slate-100 dark:border-slate-800">
+                        {!isRevealed ? (
+                            <button
+                                onClick={() => setIsRevealed(true)}
+                                className="px-8 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg bg-indigo-600 hover:bg-indigo-700 text-white w-full md:w-auto min-w-[200px] hover:scale-105 active:scale-95"
+                            >
+                                Ver Solución <Eye />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleNext}
+                                className="px-8 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg bg-slate-900 dark:bg-slate-700 text-white hover:bg-black dark:hover:bg-slate-600 w-full md:w-auto min-w-[200px]"
+                            >
+                                Siguiente <ArrowRight />
+                            </button>
+                        )}
+                    </div>
+                </motion.div>
+            </AnimatePresence>
+        </div>
+    );
+};
+
+export default ExamClozeMode;
