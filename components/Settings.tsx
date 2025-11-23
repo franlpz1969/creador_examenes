@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ExamType, ExamSettings, Difficulty } from '../types';
-import { Settings as SettingsIcon, BookOpen, Layers, BrainCircuit, ArrowRight, BarChart3, Clock, Volume2, FileText, File as FileIcon, Eye } from 'lucide-react';
+import { Settings as SettingsIcon, BookOpen, Layers, BrainCircuit, ArrowRight, Clock, Volume2, FileText, File as FileIcon } from 'lucide-react';
 
 import { getQuestionCountsPerDocument } from '../services/geminiService';
-import { PDFPreviewModal } from './PDFPreviewModal';
+import { PDFPreviewPanel } from './PDFPreviewPanel';
 
 interface SettingsProps {
     onStart: (settings: ExamSettings) => void;
@@ -25,9 +25,80 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
     const [autoRead, setAutoRead] = useState(false);
     const [timeLimit, setTimeLimit] = useState(0);
     const [showSummary, setShowSummary] = useState(true);
-    const [showSourceFile, setShowSourceFile] = useState(false);
+    const [showSourceFile, setShowSourceFile] = useState(true); // Enabled by default
     const [previewFile, setPreviewFile] = useState<File | null>(null);
 
+    // Voice Selection
+    const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+    const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
+    const [isPreviewingSpeech, setIsPreviewingSpeech] = useState(false);
+
+    // Load available voices
+    useEffect(() => {
+        const loadVoices = () => {
+            const voices = window.speechSynthesis.getVoices();
+
+            // Filter and prioritize high-quality voices
+            const spanishVoices = voices.filter(v => v.lang.startsWith('es'));
+
+            // Sort voices: premium/neural first, then by quality indicators
+            const sortedVoices = spanishVoices.sort((a, b) => {
+                // Prioritize voices with quality indicators in their names
+                const aQuality = (a.name.toLowerCase().includes('premium') ||
+                    a.name.toLowerCase().includes('neural') ||
+                    a.name.toLowerCase().includes('enhanced')) ? 1 : 0;
+                const bQuality = (b.name.toLowerCase().includes('premium') ||
+                    b.name.toLowerCase().includes('neural') ||
+                    b.name.toLowerCase().includes('enhanced')) ? 1 : 0;
+
+                if (aQuality !== bQuality) return bQuality - aQuality;
+
+                // Then prioritize es-ES over other Spanish variants
+                const aIsES = a.lang === 'es-ES' ? 1 : 0;
+                const bIsES = b.lang === 'es-ES' ? 1 : 0;
+                return bIsES - aIsES;
+            });
+
+            setAvailableVoices(sortedVoices.length > 0 ? sortedVoices : voices);
+
+            // Auto-select best quality Spanish voice
+            if (!selectedVoiceURI && sortedVoices.length > 0) {
+                setSelectedVoiceURI(sortedVoices[0].voiceURI);
+            }
+        };
+
+        loadVoices();
+
+        // Some browsers load voices asynchronously
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    }, []);
+
+    const previewVoice = () => {
+        if (!selectedVoiceURI) return;
+
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+            setIsPreviewingSpeech(false);
+            return;
+        }
+
+        const utterance = new SpeechSynthesisUtterance(
+            "Hola, esta es una muestra de la voz seleccionada para la lectura de preguntas."
+        );
+        utterance.lang = 'es-ES';
+
+        const voices = window.speechSynthesis.getVoices();
+        const voice = voices.find(v => v.voiceURI === selectedVoiceURI);
+        if (voice) utterance.voice = voice;
+
+        utterance.onstart = () => setIsPreviewingSpeech(true);
+        utterance.onend = () => setIsPreviewingSpeech(false);
+        utterance.onerror = () => setIsPreviewingSpeech(false);
+
+        window.speechSynthesis.speak(utterance);
+    };
 
     const distribution = React.useMemo(() => {
         return getQuestionCountsPerDocument(pdfText, questionCount);
@@ -46,20 +117,22 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
             timeLimit,
             showSummary,
             showSourceFile,
-            benevolence
+            benevolence,
+            voiceURI: selectedVoiceURI
         });
     };
 
     return (
-        <div className="w-full max-w-3xl mx-auto bg-white dark:bg-slate-950 rounded-xl shadow-lg dark:shadow-slate-900/50 overflow-hidden border border-slate-100 dark:border-slate-800">
+        <div className="w-full max-w-6xl mx-auto bg-white dark:bg-slate-950 rounded-xl shadow-lg dark:shadow-slate-900/50 overflow-hidden border border-slate-100 dark:border-slate-800">
             <div className="bg-indigo-600 dark:bg-indigo-900 px-4 py-2 text-white flex items-center gap-2 shadow-sm">
                 <SettingsIcon className="w-4 h-4" />
-                <h2 className="text-sm font-bold">Configuración</h2>
+                <h2 className="text-sm font-bold">Configuración del Examen</h2>
             </div>
 
-            <div className="p-3 space-y-3">
-                {/* Mode Selection */}
-                <div>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-4 p-4">
+                {/* Left Column: Settings */}
+                <div className="space-y-3">
+                    {/* Mode Selection */}
                     <div className="grid grid-cols-3 gap-2">
                         {[
                             { id: ExamType.TEST, icon: Layers, label: 'Test' },
@@ -76,13 +149,10 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                             </button>
                         ))}
                     </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Left Column */}
-                    <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-
-                        {/* Difficulty & Count Row */}
+                    {/* Main Settings Panel */}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-3">
+                        {/* Difficulty & Count */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Dificultad</label>
@@ -106,18 +176,21 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                                     onChange={(e) => setQuestionCount(parseInt(e.target.value))}
                                     className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 mt-2"
                                 />
-                                {distribution.length > 1 && (
-                                    <div className="mt-2 space-y-1">
-                                        {distribution.map((doc, idx) => (
-                                            <div key={idx} className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
-                                                <span className="truncate max-w-[120px]">{doc.docName}</span>
-                                                <span className="font-bold">{doc.count}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
                             </div>
                         </div>
+
+                        {/* Question Distribution */}
+                        {distribution.length > 1 && (
+                            <div className="space-y-1">
+                                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Distribución</label>
+                                {distribution.map((doc, idx) => (
+                                    <div key={idx} className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                        <span className="truncate flex-1">{doc.docName}</span>
+                                        <span className="font-bold ml-2">{doc.count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Mode Specific Settings */}
                         {type === ExamType.TEST && (
@@ -151,9 +224,7 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
 
                         {type === ExamType.CLOZE_FLASHCARD && (
                             <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                                <div className="flex justify-between mb-1">
-                                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Huecos por carta: {maxClozeBlanks}</label>
-                                </div>
+                                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Huecos: {maxClozeBlanks}</label>
                                 <input
                                     type="range"
                                     min="1"
@@ -164,25 +235,25 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                                 />
                             </div>
                         )}
+
                         {type === ExamType.OPEN_FLASHCARD && (
                             <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Nivel de Benevolencia</label>
+                                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Benevolencia</label>
                                 <select
                                     value={benevolence}
                                     onChange={(e) => setBenevolence(e.target.value as 'STRICT' | 'NORMAL' | 'BENEVOLENT')}
                                     className="w-full p-1.5 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded focus:ring-indigo-500"
                                 >
-                                    <option value="STRICT">Estricto (Exige precisión)</option>
-                                    <option value="NORMAL">Normal (Equilibrado)</option>
-                                    <option value="BENEVOLENT">Benevolente (Flexible)</option>
+                                    <option value="STRICT">Estricto</option>
+                                    <option value="NORMAL">Normal</option>
+                                    <option value="BENEVOLENT">Benevolente</option>
                                 </select>
                             </div>
                         )}
                     </div>
 
-                    {/* Right Column: Control */}
-                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800 flex flex-col justify-center gap-3">
-
+                    {/* Control Settings */}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                                 <Volume2 size={14} className="text-indigo-500" /> Lectura Auto
@@ -191,6 +262,42 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                                 <input type="checkbox" checked={autoRead} onChange={e => setAutoRead(e.target.checked)} className="sr-only peer" />
                                 <div className="w-7 h-4 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
+                        </div>
+
+                        {/* Voice Selection */}
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                                <Volume2 size={10} className="inline mr-1" />Voz de Lectura
+                            </label>
+                            <div className="flex gap-2">
+                                <select
+                                    value={selectedVoiceURI}
+                                    onChange={(e) => setSelectedVoiceURI(e.target.value)}
+                                    className="flex-1 p-1.5 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded focus:ring-indigo-500"
+                                    disabled={availableVoices.length === 0}
+                                >
+                                    {availableVoices.length === 0 ? (
+                                        <option>Cargando voces...</option>
+                                    ) : (
+                                        availableVoices.map((voice) => (
+                                            <option key={voice.voiceURI} value={voice.voiceURI}>
+                                                {voice.name} ({voice.lang})
+                                            </option>
+                                        ))
+                                    )}
+                                </select>
+                                <button
+                                    onClick={previewVoice}
+                                    disabled={!selectedVoiceURI}
+                                    className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center gap-1 ${isPreviewingSpeech
+                                        ? 'bg-red-500 text-white hover:bg-red-600'
+                                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900 dark:text-indigo-300 disabled:opacity-50'
+                                        }`}
+                                    title="Escuchar muestra de voz"
+                                >
+                                    {isPreviewingSpeech ? '⏸️' : '🔊'}
+                                </button>
+                            </div>
                         </div>
 
                         <div className="flex items-center justify-between">
@@ -213,9 +320,9 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                             </label>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                        <div>
                             <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                <Clock size={14} className="text-indigo-500" /> Límite Tiempo (s)
+                                <Clock size={14} className="text-indigo-500" /> Límite (s)
                             </label>
                             <input
                                 type="number"
@@ -228,30 +335,30 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                             />
                         </div>
                     </div>
-                </div>
 
-                {/* Uploaded Documents Section */}
-                {uploadedFiles && uploadedFiles.size > 0 && (
-                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center gap-1.5">
-                            <FileIcon size={14} className="text-indigo-500" /> Documentos Subidos
-                        </h3>
-                        <div className="space-y-2">
-                            {Array.from(uploadedFiles.entries()).map(([filename, file]) => {
-                                const docDistribution = distribution.find(d => d.docName === filename);
-                                return (
-                                    <div key={filename} className="bg-white dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between group hover:border-indigo-300 dark:hover:border-indigo-700 transition">
-                                        <div className="flex-1 min-w-0">
-                                            <button
-                                                onClick={() => setPreviewFile(file)}
-                                                className="text-left w-full flex items-center gap-2 hover:text-indigo-600 dark:hover:text-indigo-400 transition group"
-                                            >
-                                                <Eye size={14} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition text-indigo-500" />
-                                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate group-hover:underline">
-                                                    {filename}
-                                                </span>
-                                            </button>
-                                            <div className="flex gap-3 mt-1 text-[10px] text-slate-400">
+                    {/* Uploaded Documents List */}
+                    {uploadedFiles && uploadedFiles.size > 0 && (
+                        <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center gap-1.5">
+                                <FileIcon size={14} className="text-indigo-500" /> Documentos ({uploadedFiles.size})
+                            </h3>
+                            <div className="space-y-1">
+                                {Array.from(uploadedFiles.entries()).map(([filename, file]) => {
+                                    const docDistribution = distribution.find(d => d.docName === filename);
+                                    const isSelected = previewFile === file;
+                                    return (
+                                        <button
+                                            key={filename}
+                                            onClick={() => setPreviewFile(file)}
+                                            className={`w-full text-left p-2 rounded-lg border transition ${isSelected
+                                                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                                                : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 bg-white dark:bg-slate-800'
+                                                }`}
+                                        >
+                                            <div className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
+                                                {filename}
+                                            </div>
+                                            <div className="flex gap-3 mt-0.5 text-[10px] text-slate-400">
                                                 <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                                                 {docDistribution && (
                                                     <span className="font-bold text-indigo-600 dark:text-indigo-400">
@@ -259,29 +366,26 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
                                                     </span>
                                                 )}
                                             </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                <button
-                    onClick={handleStart}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg active:scale-[0.99]"
-                >
-                    Comenzar Examen <ArrowRight size={16} />
-                </button>
+                    <button
+                        onClick={handleStart}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg active:scale-[0.99]"
+                    >
+                        Comenzar Examen <ArrowRight size={16} />
+                    </button>
+                </div>
+
+                {/* Right Column: PDF Preview */}
+                <div className="lg:sticky lg:top-4 h-[500px]">
+                    <PDFPreviewPanel file={previewFile} />
+                </div>
             </div>
-
-            {/* PDF Preview Modal */}
-            {previewFile && (
-                <PDFPreviewModal
-                    file={previewFile}
-                    onClose={() => setPreviewFile(null)}
-                />
-            )}
         </div>
     );
 };

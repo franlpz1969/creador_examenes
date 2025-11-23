@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClozeCard } from '../types';
+import { ClozeCard, ExamSettings } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, ArrowRight, RotateCcw, Volume2, StopCircle, FileText } from 'lucide-react';
 
@@ -7,8 +7,10 @@ interface Props {
     cards: ClozeCard[];
     onRestart: () => void;
     uploadedFiles?: Map<string, File>;
+    settings: ExamSettings;
 }
 
+// Helper to create PDF blob URL with page anchor
 // Helper to create PDF blob URL with page anchor
 const createPDFLink = (uploadedFiles: Map<string, File> | undefined, sourceFile: string | undefined): { url: string | null; display: string } => {
     if (!sourceFile || !uploadedFiles) return { url: null, display: sourceFile || '' };
@@ -18,15 +20,34 @@ const createPDFLink = (uploadedFiles: Map<string, File> | undefined, sourceFile:
     if (!match) return { url: null, display: sourceFile };
 
     const [, filename, pageNum] = match;
-    const file = uploadedFiles.get(filename.trim());
+    const trimmedFilename = filename.trim();
 
-    if (!file) return { url: null, display: sourceFile };
+    // Try exact match first
+    let file = uploadedFiles.get(trimmedFilename);
+
+    // If not found, try fuzzy matching (remove extension and compare base names)
+    if (!file) {
+        const baseNameToFind = trimmedFilename.replace(/\.[^.]+$/, '').toLowerCase();
+
+        for (const [key, value] of uploadedFiles.entries()) {
+            const baseName = key.replace(/\.[^.]+$/, '').toLowerCase();
+            if (baseName === baseNameToFind) {
+                file = value;
+                break;
+            }
+        }
+    }
+
+    if (!file) {
+        console.warn(`PDF file not found for source: "${sourceFile}". Available files:`, Array.from(uploadedFiles.keys()));
+        return { url: null, display: sourceFile };
+    }
 
     const blobUrl = URL.createObjectURL(file);
     return { url: `${blobUrl}#page=${pageNum}`, display: sourceFile };
 };
 
-const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles }) => {
+const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles, settings }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isRevealed, setIsRevealed] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
@@ -111,9 +132,22 @@ const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles }) => 
         setTimeout(() => {
             const utterance = new SpeechSynthesisUtterance(textToRead);
             utterance.lang = 'es-ES';
+            utterance.rate = 0.9; // Slightly slower for more natural sound
+            utterance.pitch = 1.0; // Normal pitch
 
             const setVoice = () => {
                 const voices = window.speechSynthesis.getVoices();
+
+                // Use voice from settings if provided
+                if (settings.voiceURI) {
+                    const selectedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
+                    if (selectedVoice) {
+                        utterance.voice = selectedVoice;
+                        return;
+                    }
+                }
+
+                // Fallback to Spanish voice
                 const spanishVoice = voices.find(v => v.lang.includes('es-ES')) ||
                     voices.find(v => v.lang.includes('es'));
                 if (spanishVoice) utterance.voice = spanishVoice;

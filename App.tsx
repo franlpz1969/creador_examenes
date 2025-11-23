@@ -212,6 +212,7 @@ const App: React.FC = () => {
                   cards={state.clozeCards}
                   onRestart={handleRestart}
                   uploadedFiles={state.uploadedFiles}
+                  settings={state.settings}
                 />
               )}
               {state.settings.type === ExamType.OPEN_FLASHCARD && (
