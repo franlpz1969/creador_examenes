@@ -6,9 +6,27 @@ import { Eye, ArrowRight, RotateCcw, Volume2, StopCircle, FileText } from 'lucid
 interface Props {
     cards: ClozeCard[];
     onRestart: () => void;
+    uploadedFiles?: Map<string, File>;
 }
 
-const ExamClozeMode: React.FC<Props> = ({ cards, onRestart }) => {
+// Helper to create PDF blob URL with page anchor
+const createPDFLink = (uploadedFiles: Map<string, File> | undefined, sourceFile: string | undefined): { url: string | null; display: string } => {
+    if (!sourceFile || !uploadedFiles) return { url: null, display: sourceFile || '' };
+
+    // Parse "filename.pdf (Pág. 5)" format
+    const match = sourceFile.match(/^(.+?)\s*\(Pág\.\s*(\d+)\)$/);
+    if (!match) return { url: null, display: sourceFile };
+
+    const [, filename, pageNum] = match;
+    const file = uploadedFiles.get(filename.trim());
+
+    if (!file) return { url: null, display: sourceFile };
+
+    const blobUrl = URL.createObjectURL(file);
+    return { url: `${blobUrl}#page=${pageNum}`, display: sourceFile };
+};
+
+const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isRevealed, setIsRevealed] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
@@ -219,11 +237,18 @@ const ExamClozeMode: React.FC<Props> = ({ cards, onRestart }) => {
                                         </span>
                                     ))}
                                 </div>
-                                {currentCard.sourceFile && (
-                                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-center gap-1 text-xs text-slate-400 font-medium">
-                                        <FileText size={12} /> Fuente: {currentCard.sourceFile}
-                                    </div>
-                                )}
+                                {currentCard.sourceFile && (() => {
+                                    const { url, display } = createPDFLink(uploadedFiles, currentCard.sourceFile);
+                                    return (
+                                        <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-700 flex items-center gap-1 text-xs text-slate-400 font-medium">
+                                            <FileText size={12} /> Fuente: {url ? (
+                                                <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600 dark:hover:text-slate-200 transition">
+                                                    {display}
+                                                </a>
+                                            ) : display}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>

@@ -55,4 +55,5 @@ export interface AppState {
   clozeCards: ClozeCard[];
   openQuestions: OpenQuestion[];
   generatedImages: Record<number, string>; // Map index to base64 image
+  uploadedFiles?: Map<string, File>; // Map filename to File object
 }

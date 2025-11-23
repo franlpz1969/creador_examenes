@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { ExamType, ExamSettings, Difficulty } from '../types';
-import { Settings as SettingsIcon, BookOpen, Layers, BrainCircuit, ArrowRight, BarChart3, Clock, Volume2, FileText } from 'lucide-react';
+import { Settings as SettingsIcon, BookOpen, Layers, BrainCircuit, ArrowRight, BarChart3, Clock, Volume2, FileText, File as FileIcon, Eye } from 'lucide-react';
 
 import { getQuestionCountsPerDocument } from '../services/geminiService';
+import { PDFPreviewModal } from './PDFPreviewModal';
 
 interface SettingsProps {
     onStart: (settings: ExamSettings) => void;
     pdfText: string;
+    uploadedFiles?: Map<string, File>;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText }) => {
+export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFiles }) => {
     const [type, setType] = useState<ExamType>(ExamType.TEST);
     const [questionCount, setQuestionCount] = useState(5);
     const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
@@ -24,6 +26,8 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText }) => {
     const [timeLimit, setTimeLimit] = useState(0);
     const [showSummary, setShowSummary] = useState(true);
     const [showSourceFile, setShowSourceFile] = useState(false);
+    const [previewFile, setPreviewFile] = useState<File | null>(null);
+
 
     const distribution = React.useMemo(() => {
         return getQuestionCountsPerDocument(pdfText, questionCount);
@@ -226,6 +230,43 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText }) => {
                     </div>
                 </div>
 
+                {/* Uploaded Documents Section */}
+                {uploadedFiles && uploadedFiles.size > 0 && (
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center gap-1.5">
+                            <FileIcon size={14} className="text-indigo-500" /> Documentos Subidos
+                        </h3>
+                        <div className="space-y-2">
+                            {Array.from(uploadedFiles.entries()).map(([filename, file]) => {
+                                const docDistribution = distribution.find(d => d.docName === filename);
+                                return (
+                                    <div key={filename} className="bg-white dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between group hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                                        <div className="flex-1 min-w-0">
+                                            <button
+                                                onClick={() => setPreviewFile(file)}
+                                                className="text-left w-full flex items-center gap-2 hover:text-indigo-600 dark:hover:text-indigo-400 transition group"
+                                            >
+                                                <Eye size={14} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition text-indigo-500" />
+                                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate group-hover:underline">
+                                                    {filename}
+                                                </span>
+                                            </button>
+                                            <div className="flex gap-3 mt-1 text-[10px] text-slate-400">
+                                                <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                                                {docDistribution && (
+                                                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                                                        {docDistribution.count} preguntas
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 <button
                     onClick={handleStart}
                     className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg active:scale-[0.99]"
@@ -233,6 +274,14 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText }) => {
                     Comenzar Examen <ArrowRight size={16} />
                 </button>
             </div>
+
+            {/* PDF Preview Modal */}
+            {previewFile && (
+                <PDFPreviewModal
+                    file={previewFile}
+                    onClose={() => setPreviewFile(null)}
+                />
+            )}
         </div>
     );
 };

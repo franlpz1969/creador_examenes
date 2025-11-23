@@ -63,11 +63,14 @@ const App: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFSChange);
   }, []);
 
-  const handleTextExtracted = (text: string) => {
-    setState(prev => ({ ...prev, pdfText: text, step: 'SETTINGS' }));
+  const handleTextExtracted = (data: { text: string; files: File[] }) => {
+    const filesMap = new Map<string, File>();
+    data.files.forEach(file => filesMap.set(file.name, file));
+
+    setState(prev => ({ ...prev, pdfText: data.text, uploadedFiles: filesMap, step: 'SETTINGS' }));
 
     // Trigger background generation asynchronously
-    generateThematicBackground(text)
+    generateThematicBackground(data.text)
       .then(bg => {
         if (bg) setBackgroundImage(bg);
       })
@@ -180,7 +183,7 @@ const App: React.FC = () => {
           )}
 
           {state.step === 'SETTINGS' && (
-            <Settings onStart={handleStartExam} pdfText={state.pdfText} />
+            <Settings onStart={handleStartExam} pdfText={state.pdfText} uploadedFiles={state.uploadedFiles} />
           )}
 
           {state.step === 'LOADING' && (
@@ -201,12 +204,14 @@ const App: React.FC = () => {
                   questions={state.testQuestions}
                   settings={state.settings}
                   onRestart={handleRestart}
+                  uploadedFiles={state.uploadedFiles}
                 />
               )}
               {state.settings.type === ExamType.CLOZE_FLASHCARD && (
                 <ExamClozeMode
                   cards={state.clozeCards}
                   onRestart={handleRestart}
+                  uploadedFiles={state.uploadedFiles}
                 />
               )}
               {state.settings.type === ExamType.OPEN_FLASHCARD && (
@@ -214,6 +219,7 @@ const App: React.FC = () => {
                   questions={state.openQuestions}
                   onRestart={handleRestart}
                   settings={state.settings}
+                  uploadedFiles={state.uploadedFiles}
                 />
               )}
             </>

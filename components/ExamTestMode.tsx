@@ -8,6 +8,7 @@ interface Props {
     questions: TestQuestion[];
     settings: ExamSettings;
     onRestart: () => void;
+    uploadedFiles?: Map<string, File>;
 }
 
 interface SummaryItem {
@@ -18,7 +19,24 @@ interface SummaryItem {
     explanation: string;
 }
 
-const ExamTestMode: React.FC<Props> = ({ questions, settings, onRestart }) => {
+// Helper to create PDF blob URL with page anchor
+const createPDFLink = (uploadedFiles: Map<string, File> | undefined, sourceFile: string | undefined): { url: string | null; display: string } => {
+    if (!sourceFile || !uploadedFiles) return { url: null, display: sourceFile || '' };
+
+    // Parse "filename.pdf (Pág. 5)" format
+    const match = sourceFile.match(/^(.+?)\s*\(Pág\.\s*(\d+)\)$/);
+    if (!match) return { url: null, display: sourceFile };
+
+    const [, filename, pageNum] = match;
+    const file = uploadedFiles.get(filename.trim());
+
+    if (!file) return { url: null, display: sourceFile };
+
+    const blobUrl = URL.createObjectURL(file);
+    return { url: `${blobUrl}#page=${pageNum}`, display: sourceFile };
+};
+
+const ExamTestMode: React.FC<Props> = ({ questions, settings, onRestart, uploadedFiles }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [selectedOptions, setSelectedOptions] = useState<number[]>([]);
     const [isAnswered, setIsAnswered] = useState(false);
@@ -503,11 +521,18 @@ const ExamTestMode: React.FC<Props> = ({ questions, settings, onRestart }) => {
                                 </div>
                                 <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200 italic">
                                     "{currentQuestion.sourceQuote}"
-                                    {currentQuestion.sourceFile && (
-                                        <div className="mt-2 pt-2 border-t border-yellow-200 dark:border-yellow-800/50 flex items-center gap-1 not-italic font-semibold text-xs opacity-75">
-                                            <FileText size={12} /> Fuente: {currentQuestion.sourceFile}
-                                        </div>
-                                    )}
+                                    {currentQuestion.sourceFile && (() => {
+                                        const { url, display } = createPDFLink(uploadedFiles, currentQuestion.sourceFile);
+                                        return (
+                                            <div className="mt-2 pt-2 border-t border-yellow-200 dark:border-yellow-800/50 flex items-center gap-1 not-italic font-semibold text-xs opacity-75">
+                                                <FileText size={12} /> Fuente: {url ? (
+                                                    <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-900 dark:hover:text-yellow-100 transition">
+                                                        {display}
+                                                    </a>
+                                                ) : display}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </motion.div>
                         )}
