@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppState, ExamSettings, ExamType } from './types';
-import { generateTestQuestions, generateClozeCards, generateOpenQuestions, generateThematicBackground } from './services/geminiService';
+import { generateTestQuestions, generateClozeCards, generateOpenQuestions, generateThematicBackground, generateExamTitle } from './services/geminiService';
 import FileUpload from './components/FileUpload';
 import { Settings } from './components/Settings';
 import ExamTestMode from './components/ExamTestMode';
@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [examTitle, setExamTitle] = useState<string>('');
 
   // Dark mode effect
   useEffect(() => {
@@ -69,7 +70,11 @@ const App: React.FC = () => {
 
     setState(prev => ({ ...prev, pdfText: data.text, uploadedFiles: filesMap, step: 'SETTINGS' }));
 
-    // Trigger background generation asynchronously
+    // Generate title and background asynchronously
+    generateExamTitle(data.text)
+      .then(title => setExamTitle(title))
+      .catch(err => console.error("Failed to generate title", err));
+
     generateThematicBackground(data.text)
       .then(bg => {
         if (bg) setBackgroundImage(bg);
@@ -119,7 +124,7 @@ const App: React.FC = () => {
         className="fixed inset-0 z-[-1] bg-cover bg-center transition-opacity duration-1000 pointer-events-none"
         style={{
           backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-          opacity: backgroundImage ? 0.2 : 0 // 80% transparency = 20% opacity
+          opacity: backgroundImage ? 0.15 : 0 // 85% transparency = 15% opacity
         }}
       />
 
@@ -183,7 +188,7 @@ const App: React.FC = () => {
           )}
 
           {state.step === 'SETTINGS' && (
-            <Settings onStart={handleStartExam} pdfText={state.pdfText} uploadedFiles={state.uploadedFiles} />
+            <Settings onStart={handleStartExam} pdfText={state.pdfText} uploadedFiles={state.uploadedFiles} examTitle={examTitle} />
           )}
 
           {state.step === 'LOADING' && (

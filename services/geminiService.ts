@@ -121,18 +121,26 @@ export const generateTestQuestions = async (text: string, settings: ExamSettings
   const prompt = `
     Genera ${settings.questionCount} preguntas de tipo test (selección múltiple) basadas en el siguiente texto.
     
-    INSTRUCCIÓN CRÍTICA: El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
-    ${settings.showSourceFile ? "PARA CADA PREGUNTA, DEBES IDENTIFICAR DE QUÉ DOCUMENTO Y PÁGINA PROVIENE LA INFORMACIÓN. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
+    IMPORTANTE: 
+    - Usa principalmente la información del texto proporcionado
+    - Las preguntas deben ser respondibles con el contenido del texto
+    - Puedes usar conocimiento general para crear opciones incorrectas plausibles
+    
+    El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
+    ${settings.showSourceFile ? "Para cada pregunta, identifica de qué documento y página proviene. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
     
     ${distributionInstruction}
 
-    Todo el contenido DEBE estar en ESPAÑOL.
-    ${getDifficultyPrompt(settings.difficulty)}
-    Cada pregunta debe tener ${settings.optionsCount || 4} opciones.
-    ${settings.allowMultipleCorrect ? "Las preguntas PUEDEN tener múltiples respuestas correctas." : "Las preguntas DEBEN tener exactamente una respuesta correcta."}
+    REQUISITOS:
+    - Todo en ESPAÑOL
+    - ${getDifficultyPrompt(settings.difficulty)}
+    - ${settings.optionsCount || 4} opciones por pregunta
+    - ${settings.allowMultipleCorrect ? "Pueden haber múltiples respuestas correctas" : "Una sola respuesta correcta"}
+    - Incluye una explicación clara
+    - Proporciona una cita del texto que respalde la respuesta
     
-    Contexto del texto:
-    ${text.slice(0, 30000)}... (truncado)
+    TEXTO:
+    ${text.slice(0, 30000)}
   `;
 
   const response = await ai.models.generateContent({
@@ -165,19 +173,25 @@ export const generateClozeCards = async (text: string, settings: ExamSettings): 
   };
 
   const prompt = `
-    Crea ${settings.questionCount} tarjetas didácticas (flashcards) de rellenar huecos a partir del texto.
+    Crea ${settings.questionCount} tarjetas didácticas (flashcards) de rellenar huecos basadas en el siguiente texto.
 
-    INSTRUCCIÓN CRÍTICA: El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
-    ${settings.showSourceFile ? "PARA CADA TARJETA, DEBES IDENTIFICAR DE QUÉ DOCUMENTO Y PÁGINA PROVIENE LA INFORMACIÓN. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
+    IMPORTANTE:
+    - Usa información del texto proporcionado
+    - Cada tarjeta debe contener conceptos clave del texto
+    - Los términos ocultos deben ser palabras importantes que aparecen en el texto
+
+    El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
+    ${settings.showSourceFile ? "Para cada tarjeta, identifica de qué documento y página proviene. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
 
     ${distributionInstruction}
 
-    Todo el contenido (fullText y hiddenWords) DEBE estar en ESPAÑOL.
-    ${getDifficultyPrompt(settings.difficulty)}
-    Identifica hasta ${settings.maxClozeBlanks || 3} términos clave para ocultar por tarjeta.
+    REQUISITOS:
+    - Todo en ESPAÑOL
+    - ${getDifficultyPrompt(settings.difficulty)}
+    - Hasta ${settings.maxClozeBlanks || 3} términos clave ocultos por tarjeta
 
-    Contexto del texto:
-    ${text.slice(0, 30000)}... (truncado)
+    TEXTO:
+    ${text.slice(0, 30000)}
   `;
 
   const response = await ai.models.generateContent({
@@ -210,21 +224,26 @@ export const generateOpenQuestions = async (text: string, settings: ExamSettings
   };
 
   const prompt = `
-    Genera ${settings.questionCount} preguntas de estudio abiertas basadas en el texto.
+    Genera ${settings.questionCount} preguntas de estudio abiertas basadas en el siguiente texto.
 
-    INSTRUCCIÓN CRÍTICA: El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
-    ${settings.showSourceFile ? "PARA CADA PREGUNTA, DEBES IDENTIFICAR DE QUÉ DOCUMENTO Y PÁGINA PROVIENE LA INFORMACIÓN. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
+    IMPORTANTE:
+    - Usa principalmente información del texto proporcionado
+    - Las preguntas deben ser respondibles con el contenido del texto
+    - Las respuestas modelo deben basarse en el texto
+
+    El texto contiene múltiples documentos delimitados por "--- Inicio del documento: [nombre] | Páginas: [num] ---" y marcadores de página "--- [Página X] ---".
+    ${settings.showSourceFile ? "Para cada pregunta, identifica de qué documento y página proviene. Asigna 'NombreArchivo (Pág. X)' al campo 'sourceFile'." : ""}
 
     ${distributionInstruction}
 
-    Todo el contenido DEBE estar en ESPAÑOL.
-    ${getDifficultyPrompt(settings.difficulty)}
-    IMPORTANTE: Las preguntas deben ser CORTAS y CONCISAS.
-    La respuesta esperada no debe exceder 1-2 oraciones.
-    Proporciona una respuesta modelo breve para cada una.
+    REQUISITOS:
+    - Todo en ESPAÑOL
+    - ${getDifficultyPrompt(settings.difficulty)}
+    - Preguntas CORTAS y CONCISAS
+    - Respuestas de 1-2 oraciones máximo
 
-    Contexto del texto:
-    ${text.slice(0, 30000)}... (truncado)
+    TEXTO:
+    ${text.slice(0, 30000)}
   `;
 
   const response = await ai.models.generateContent({
@@ -335,5 +354,35 @@ export const generateThematicBackground = async (text: string): Promise<string |
   } catch (e) {
     console.error("Background generation failed", e);
     return null;
+  }
+};
+
+export const generateExamTitle = async (text: string): Promise<string> => {
+  const ai = getAiClient();
+
+  try {
+    const prompt = `
+      Analiza el siguiente texto y genera un título corto y descriptivo para un examen.
+      El título debe:
+      - Ser conciso (máximo 8 palabras)
+      - Reflejar el tema principal del contenido
+      - Estar en español
+      - Ser apropiado para un examen académico
+      - NO incluir la palabra "Examen" (se añadirá automáticamente)
+      
+      Texto: ${text.slice(0, 3000)}
+      
+      Responde SOLO con el título, sin comillas ni puntuación adicional.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    return response.text?.trim() || "Conocimientos Generales";
+  } catch (e) {
+    console.error("Title generation failed", e);
+    return "Conocimientos Generales";
   }
 };

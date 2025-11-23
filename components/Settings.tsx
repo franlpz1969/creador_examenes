@@ -9,9 +9,10 @@ interface SettingsProps {
     onStart: (settings: ExamSettings) => void;
     pdfText: string;
     uploadedFiles?: Map<string, File>;
+    examTitle?: string;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFiles }) => {
+export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFiles, examTitle }) => {
     const [type, setType] = useState<ExamType>(ExamType.TEST);
     const [questionCount, setQuestionCount] = useState(5);
     const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
@@ -38,12 +39,18 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
         const loadVoices = () => {
             const voices = window.speechSynthesis.getVoices();
 
-            // Filter and prioritize high-quality voices
+            // Filter Spanish voices
             const spanishVoices = voices.filter(v => v.lang.startsWith('es'));
 
-            // Sort voices: premium/neural first, then by quality indicators
+            // Sort voices: Google first, then premium/neural, then es-ES
             const sortedVoices = spanishVoices.sort((a, b) => {
-                // Prioritize voices with quality indicators in their names
+                // Prioritize Google voices
+                const aIsGoogle = a.name.toLowerCase().includes('google') ? 2 : 0;
+                const bIsGoogle = b.name.toLowerCase().includes('google') ? 2 : 0;
+
+                if (aIsGoogle !== bIsGoogle) return bIsGoogle - aIsGoogle;
+
+                // Then prioritize quality indicators
                 const aQuality = (a.name.toLowerCase().includes('premium') ||
                     a.name.toLowerCase().includes('neural') ||
                     a.name.toLowerCase().includes('enhanced')) ? 1 : 0;
@@ -61,7 +68,7 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
 
             setAvailableVoices(sortedVoices.length > 0 ? sortedVoices : voices);
 
-            // Auto-select best quality Spanish voice
+            // Auto-select Google Spanish voice or best quality Spanish voice
             if (!selectedVoiceURI && sortedVoices.length > 0) {
                 setSelectedVoiceURI(sortedVoices[0].voiceURI);
             }
@@ -124,14 +131,24 @@ export const Settings: React.FC<SettingsProps> = ({ onStart, pdfText, uploadedFi
 
     return (
         <div className="w-full max-w-6xl mx-auto bg-white dark:bg-slate-950 rounded-xl shadow-lg dark:shadow-slate-900/50 overflow-hidden border border-slate-100 dark:border-slate-800">
-            <div className="bg-indigo-600 dark:bg-indigo-900 px-4 py-2 text-white flex items-center gap-2 shadow-sm">
+            {/* Exam Title Header */}
+            {examTitle && (
+                <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 dark:from-indigo-900 dark:via-purple-900 dark:to-indigo-900 px-4 py-3 text-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent"></div>
+                    <h1 className="text-xl md:text-2xl font-black text-white tracking-tight relative z-10 drop-shadow-lg">
+                        📚 {examTitle}
+                    </h1>
+                </div>
+            )}
+
+            <div className="bg-indigo-600 dark:bg-indigo-900 px-3 py-1.5 text-white flex items-center gap-2 shadow-sm">
                 <SettingsIcon className="w-4 h-4" />
                 <h2 className="text-sm font-bold">Configuración del Examen</h2>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-4 p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-3 p-3">
                 {/* Left Column: Settings */}
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                     {/* Mode Selection */}
                     <div className="grid grid-cols-3 gap-2">
                         {[

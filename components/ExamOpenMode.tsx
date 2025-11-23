@@ -308,6 +308,14 @@ const ExamOpenMode: React.FC<Props> = ({ questions, onRestart, settings, uploade
                         </div>
                     )}
                     <span>PUNTOS: {totalScore}</span>
+                    <button
+                        onClick={() => setCurrentIndex(questions.length)}
+                        className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                        title="Terminar examen y ver resultados"
+                    >
+                        <XCircle size={14} />
+                        Terminar
+                    </button>
                 </div>
             </div>
 

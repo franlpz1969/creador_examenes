@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ClozeCard, ExamSettings } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, ArrowRight, RotateCcw, Volume2, StopCircle, FileText } from 'lucide-react';
+import { Eye, ArrowRight, RotateCcw, Volume2, StopCircle, FileText, XCircle } from 'lucide-react';
 
 interface Props {
     cards: ClozeCard[];
@@ -122,52 +122,62 @@ const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles, setti
         window.speechSynthesis.cancel();
 
         const parts = getParsedContent();
-        const textToRead = parts.map(p => {
-            if (p.hidden && !isRevealed) {
-                return " espacio "; // Reads "space" for gaps
-            }
-            return p.text.replace(/[_]{2,}/g, '');
-        }).join('');
 
-        setTimeout(() => {
-            const utterance = new SpeechSynthesisUtterance(textToRead);
-            utterance.lang = 'es-ES';
-            utterance.rate = 0.9; // Slightly slower for more natural sound
-            utterance.pitch = 1.0; // Normal pitch
+        // Create speech with pauses at gaps
+        let partIndex = 0;
+        const speakParts = () => {
+            if (partIndex >= parts.length) return;
 
-            const setVoice = () => {
-                const voices = window.speechSynthesis.getVoices();
+            const part = parts[partIndex];
 
-                // Use voice from settings if provided
-                if (settings.voiceURI) {
-                    const selectedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
-                    if (selectedVoice) {
-                        utterance.voice = selectedVoice;
-                        return;
-                    }
-                }
-
-                // Fallback to Spanish voice
-                const spanishVoice = voices.find(v => v.lang.includes('es-ES')) ||
-                    voices.find(v => v.lang.includes('es'));
-                if (spanishVoice) utterance.voice = spanishVoice;
-            };
-
-            if (window.speechSynthesis.getVoices().length === 0) {
-                window.speechSynthesis.onvoiceschanged = setVoice;
+            if (part.hidden && !isRevealed) {
+                // Pause for 250ms at gaps
+                setTimeout(() => {
+                    partIndex++;
+                    speakParts();
+                }, 250);
             } else {
-                setVoice();
+                const text = part.text.replace(/[_]{2,}/g, '');
+                if (text.trim()) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'es-ES';
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.0;
+
+                    const setVoice = () => {
+                        const voices = window.speechSynthesis.getVoices();
+                        if (settings.voiceURI) {
+                            const selectedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
+                            if (selectedVoice) {
+                                utterance.voice = selectedVoice;
+                                return;
+                            }
+                        }
+                        const spanishVoice = voices.find(v => v.lang.includes('es-ES')) ||
+                            voices.find(v => v.lang.includes('es'));
+                        if (spanishVoice) utterance.voice = spanishVoice;
+                    };
+
+                    if (window.speechSynthesis.getVoices().length === 0) {
+                        window.speechSynthesis.onvoiceschanged = setVoice;
+                    } else {
+                        setVoice();
+                    }
+
+                    utterance.onend = () => {
+                        partIndex++;
+                        speakParts();
+                    };
+
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    partIndex++;
+                    speakParts();
+                }
             }
+        };
 
-            // @ts-ignore
-            window.currentUtterance = utterance;
-            utterance.onend = () => {
-                // @ts-ignore
-                delete window.currentUtterance;
-            };
-
-            window.speechSynthesis.speak(utterance);
-        }, 50);
+        setTimeout(() => speakParts(), 50);
     }
 
     const handleNext = () => {
@@ -213,6 +223,14 @@ const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles, setti
                             </>
                         )}
                     </button>
+                    <button
+                        onClick={() => setCurrentIndex(cards.length)}
+                        className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-full transition-colors flex items-center gap-2"
+                        title="Terminar repaso"
+                    >
+                        <XCircle size={16} />
+                        Terminar
+                    </button>
                 </div>
             </div>
 
@@ -249,7 +267,7 @@ const ExamClozeMode: React.FC<Props> = ({ cards, onRestart, uploadedFiles, setti
                                                     }
                                         `}>
                                                     <span className={!isRevealed ? 'opacity-0' : ''}>
-                                                        {part.word || "______"}
+                                                        {part.word || part.text || "______"}
                                                     </span>
                                                 </span>
                                             </span>
